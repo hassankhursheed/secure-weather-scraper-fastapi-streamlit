@@ -17,7 +17,7 @@ Every fetch, from the app or the API, is saved to a SQLite database.
 
 ## Features
 
-- **Login and logout** for the Streamlit app, with credentials read from environment variables
+- **Login and logout** for the Streamlit app, with credentials read from environment variables. The login survives a page refresh through a signed token in the URL that expires after 8 hours, and logging out invalidates it.
 - **Weather for any city** in metric (°C, m/s) or imperial (°F, mph) units: temperature, feels like, min/max, humidity, conditions, wind speed, pressure, visibility and coordinates
 - **Table and JSON views** of the fetched data
 - **CSV and JSON export** with timestamped file names, such as `lahore_22_10_2026_14_05_33.csv`

@@ -5,6 +5,10 @@ from utils import save_to_json, save_to_csv
 import pandas as pd
 from database import create_table, insert_weather_data
 import os
+import hmac
+import hashlib
+import secrets
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,6 +18,33 @@ PASSWORD = os.getenv("STREAMLIT_PASSWORD")
 
 if not USERNAME or not PASSWORD:
     raise RuntimeError("Streamlit credentials not set in .env")
+
+
+# login token settings, used to keep the user logged in across page refresh
+TOKEN_TTL_SECONDS = 8 * 60 * 60  # 8 hours
+
+
+# random signing key, created once per server start (a new key logs everyone out)
+@st.cache_resource
+def get_signing_key():
+    return secrets.token_bytes(32)
+
+
+# create a signed login token that expires after TOKEN_TTL_SECONDS
+def create_login_token():
+    expires = str(int(time.time()) + TOKEN_TTL_SECONDS)
+    signature = hmac.new(get_signing_key(), f"{USERNAME}:{expires}".encode(), hashlib.sha256).hexdigest()
+    return f"{expires}.{signature}"
+
+
+# check that a login token was signed by this server and has not expired
+def is_valid_login_token(token):
+    try:
+        expires, signature = token.split(".")
+        expected = hmac.new(get_signing_key(), f"{USERNAME}:{expires}".encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected) and int(expires) > time.time()
+    except (AttributeError, ValueError):
+        return False
 
 
 st.set_page_config(page_title="Weather App", layout="centered")
@@ -28,11 +59,8 @@ create_table()
 query_params = st.query_params
 # Session state for login
 if "logged_in" not in st.session_state:
-    # Check if user was logged in (from URL)
-    if "auth" in query_params and query_params["auth"] == "true":
-        st.session_state.logged_in = True
-    else:
-        st.session_state.logged_in = False
+    # Check if user was logged in (signed, unexpired token in the URL)
+    st.session_state.logged_in = is_valid_login_token(query_params.get("auth"))
 # Session state for weather page
 if "weather_data" not in st.session_state:
     st.session_state.weather_data = None
@@ -54,8 +82,8 @@ def login_ui():
             if user == USERNAME and pwd == PASSWORD:
                 st.session_state.logged_in = True
                 
-                # Add to URL to persist across refresh
-                st.query_params["auth"] = "true"
+                # Add a signed login token to the URL to persist across refresh
+                st.query_params["auth"] = create_login_token()
                 
                 st.success("Login successful! Redirecting...")
                 st.rerun()
@@ -76,9 +104,10 @@ def weather_ui():
             st.session_state.logged_in = False
             st.session_state.weather_data = None
             
-            # Remove auth from URL
+            # Remove auth from URL and change the signing key so old tokens stop working
             if "auth" in st.query_params:
                 del st.query_params["auth"]
+            get_signing_key.clear()
             
             st.rerun()
 
