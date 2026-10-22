@@ -1,7 +1,7 @@
 from datetime import datetime
 import streamlit as st
 from weather_api import fetch_weather
-from utilis import save_to_json, save_to_csv
+from utils import save_to_json, save_to_csv
 import pandas as pd
 from database import create_table, insert_weather_data
 import os
